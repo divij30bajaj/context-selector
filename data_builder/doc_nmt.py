@@ -1,0 +1,89 @@
+from typing import List
+
+from data_builder.data_builder import DataBuilder
+import os
+import tqdm
+from sacremoses import MosesTokenizer, MosesPunctNormalizer
+
+
+class DocNMT(DataBuilder):
+    def __init__(self, context_builder, dataset="IWSLT17", name="baseline"):
+        self.dataset = dataset
+        self.data_path = self.get_data_path()
+        self.out_path = "/".join(self.data_path.split("/")[:-1] + [name])
+        os.makedirs(self.out_path, exist_ok=True)
+        self.context_builder = context_builder
+        self.en_tokenizer = MosesTokenizer('en')
+        self.de_tokenizer = MosesTokenizer('de')
+        self.en_normalizer = MosesPunctNormalizer('en')
+        self.de_normalizer = MosesPunctNormalizer('de')
+        self.langs = ["en", "de"]
+        self.splits = ["train", "dev", "test"]
+        # self.splits = ["test"]
+        super(DocNMT).__init__()
+
+    def get_data_path(self):
+        if self.dataset == "IWSLT17":
+            return "dataset/IWSLT17/raw"
+        else:
+            return ValueError("Invalid dataset")
+
+    def build_sentence_level(self):
+        for split in self.splits:
+            for lang in self.langs:
+                print("Loading {} split for lang: {}".format(split, lang))
+
+                input_file = os.path.join(self.data_path, "concatenated_en2de_{}_{}.txt".format(split, lang))
+                output_file = os.path.join(self.out_path, "{}-sent.{}".format(split, lang))
+
+                f = open(output_file, 'w', encoding='utf-8')
+                sf = open(input_file, "r", encoding="utf-8")
+
+                for row in tqdm.tqdm(sf.readlines()):
+                    row = row.strip()
+                    if not row.startswith("<"):
+                        if lang == 'en':
+                            normalized = self.en_normalizer.normalize(row)
+                            tokenized = self.en_tokenizer.tokenize(normalized)
+                        else:
+                            normalized = self.de_normalizer.normalize(row)
+                            tokenized = self.de_tokenizer.tokenize(normalized)
+                        f.write(" ".join(tokenized) + "\n")
+                f.close()
+                sf.close()
+
+    def build_document_level(self):
+        splits = {}
+        for split in self.splits:
+            corpus = []
+            en_input_file = os.path.join(self.data_path, "concatenated_en2de_{}_{}.txt".format(split, "en"))
+            de_input_file = os.path.join(self.data_path, "concatenated_en2de_{}_{}.txt".format(split, "de"))
+            esf = open(en_input_file, "r", encoding="utf-8")
+            dsf = open(de_input_file, "r", encoding="utf-8")
+
+            en_sents, de_sents = esf.readlines(), dsf.readlines()
+            en_doc, de_doc = [], []
+            for en_row, de_row in tqdm.tqdm(zip(en_sents, de_sents)):
+                en_row = en_row.strip()
+                de_row = de_row.strip()
+                if not en_row.startswith("<"):
+                    # en_normalized = self.en_normalizer.normalize(en_row)
+                    # en_tokenized = self.en_tokenizer.tokenize(en_normalized)
+                    # de_normalized = self.de_normalizer.normalize(de_row)
+                    # de_tokenized = self.de_tokenizer.tokenize(de_normalized)
+
+                    en_doc.append(en_row)
+                    de_doc.append(de_row)
+                    # en_doc.append(" ".join(en_row))
+                    # de_doc.append(" ".join(de_row))
+                else:
+                    if len(en_doc) != 0:
+                        corpus.append({"en": en_doc, "de": de_doc})
+                        en_doc, de_doc = [], []
+
+            if len(en_doc) != 0:
+                corpus.append({"en": en_doc, "de": de_doc})
+            esf.close()
+            dsf.close()
+            splits[split] = corpus
+        return splits
