@@ -4,8 +4,9 @@ from collections import Counter
 import nltk
 
 lemmatizer = WordNetLemmatizer()
-# nltk.download('wordnet')
-# nltk.download('stopwords')
+nltk.download('wordnet')
+nltk.download('stopwords')
+nltk.download('omw-1.4')
 
 
 def check_word(tokenizer, word, prediction):

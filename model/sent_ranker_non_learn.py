@@ -1,5 +1,8 @@
+import math
+import random
 from collections import defaultdict
 
+import requests
 from stanza.server import CoreNLPClient
 
 from model.sent_ranker_ind_non_learn import SentRankerNLBase
@@ -7,26 +10,37 @@ import torch
 import time
 import os
 
-os.environ['PATH'] += ';C:/Program Files/Java/jre-1.8/bin'
+os.environ['PATH'] += ';C:/Program Files/Java/jre-1.8/bin'  # Add own java.exe path to PATH
+
+
+def normalize_mlm(mlm_score, c1=0.9, c2=1.5):
+    def sigmoid(x, c1, c2):
+        return 1/(1+math.e ** (c1*-1*(x-c2)))
+
+    return sigmoid(mlm_score, c1, c2)
 
 
 class SentRankerNonLearn(SentRankerNLBase):
     def __init__(self, threshold, weight, topK=2):
         self.weight = weight
-        self.client = CoreNLPClient(annotators=['coref'], timeout=30000, memory='4G')
         self.entity_sent_map = None
         super().__init__(threshold, topK)
 
     def extract_coref(self, sentences):
         article = " ".join(sentences).strip()
-        annotated = self.client.annotate(article)
-        corefs = annotated.corefChain
-
+        url = "http://localhost:1111/"
+        properties = {
+            "annotators": "coref",
+            "outputFormat": "json"
+        }
+        data = {"text": article}
+        response = requests.post(url, params=properties, data=data)
+        annotated = response.json()
+        corefs = annotated['corefs']
         sent_entity = defaultdict(list)
-        for cluster in corefs:
-            clusterId = cluster.chainID
-            for mention in cluster.mention:
-                sentIndex = mention.sentenceIndex
+        for clusterId, cluster in corefs.items():
+            for mention in cluster:
+                sentIndex = mention['sentNum']
                 sent_entity[sentIndex].append(clusterId)
         return sent_entity
 
@@ -44,21 +58,21 @@ class SentRankerNonLearn(SentRankerNLBase):
 
     def rank_sentences(self, sentences, blanks_dict, pos):
         masked_sentence, masked_ids, reference = self.prepare_masked_input(sentences[pos], blanks_dict[pos])
-        print("Sentence: {}".format(sentences[pos]))
-        rank = []
-        idxs = [0] + list(range(max(1, pos - 5), min(pos + 6, len(sentences))))
+        window_start, window_end = max(1, pos - 5), min(pos + 6, len(sentences))
+        idxs = [0] + list(range(window_start, window_end))
 
-        self.entity_sent_map = self.extract_coref(sentences[idxs])
+        self.entity_sent_map = self.extract_coref(sentences[window_start: window_end])
         entity_scores = {}
         for i in idxs:
             if i == pos or i == 0:
                 continue
-            entity_overlap_score = self.score_entity_overlap(pos, i)
+            sent1_idx, sent2_idx = pos-window_start, i-window_start
+            entity_overlap_score = self.score_entity_overlap(sent1_idx, sent2_idx)
             entity_scores[i] = entity_overlap_score
 
         result = []
-        print("Context:")
         for num_selected in range(self.topK):
+            rank = []
             for i in idxs:
                 if i < pos:
                     input_sentence = sentences[i] + " </s> " + masked_sentence
@@ -84,9 +98,10 @@ class SentRankerNonLearn(SentRankerNLBase):
                         score.append(per_mask_mlm_score)
 
                 mlm_score = sum(score) / len(score) if len(score) > 0 else 0
+                normalized_mlm_score = normalize_mlm(mlm_score)
                 entity_overlap_score = entity_scores[i] if i in entity_scores.keys() else 0
-                total_score = self.weight * entity_overlap_score + (1 - self.weight) * mlm_score
-                rank.append((total_score, i))
+                total_score = self.weight * entity_overlap_score + (1 - self.weight) * normalized_mlm_score
+                rank.append((total_score, i, mlm_score, normalized_mlm_score, entity_overlap_score))
 
             rank.sort(reverse=True)
             selected_sent_idx = rank[0][1]
@@ -99,9 +114,7 @@ class SentRankerNonLearn(SentRankerNLBase):
                 masked_sentence = masked_sentence + " </s> " + sentences[selected_sent_idx]
             idxs.remove(selected_sent_idx)
             result.append(selected_sent_idx-1)
-            print(sentences[selected_sent_idx], top_score)
 
-        print("")
         return result
 
 
@@ -129,9 +142,8 @@ if __name__ == '__main__':
         "It must be stopped,\" Guterres said.",
         "There are people who are still being killed here and there -- even some massacres still taking place."
     ]
-    exp = SentRankerNonLearn(threshold=1.5, weight=0.5)
+    exp = SentRankerNonLearn(threshold=0.4, weight=0.5)
     start = time.time()
-    # exp.rank_for_single_sent(sentences, 4)
     result = exp.rank_for_entire_doc(sentences)
     for i, sent in enumerate(sentences):
         print("Sentence: {}".format(sentences[i]))
