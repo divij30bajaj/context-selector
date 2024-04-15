@@ -23,7 +23,7 @@ import spacy
 from utils import utils
 
 model_name = "roberta-base"
-model = RobertaForMaskedLM.from_pretrained(model_name)
+model = RobertaForMaskedLM.from_pretrained(model_name).cuda()
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 
@@ -56,12 +56,14 @@ def main(sentences, pos=None):
                 else:
                     masked_sentence += " " + tokenizer.decode(id)
 
-            token_input = tokenizer(masked_sentence, return_tensors="pt")
+            input_ids, attn_mask = tokenizer(masked_sentence, return_tensors="pt")
+            input_ids = input_ids.cuda()
+            attn_mask = attn_mask.cuda()
             with torch.no_grad():
-                outputs = model(**token_input)
+                outputs = model(input_ids, attn_mask)
                 logits = outputs.logits
 
-            mask_index = torch.where(token_input["input_ids"] == tokenizer.mask_token_id)
+            mask_index = torch.where(input_ids == tokenizer.mask_token_id)
             probs = torch.nn.functional.softmax(logits[mask_index[0], mask_index[1], :], dim=-1)
             probs = probs[0, :]
             top_indices = np.argsort(probs.numpy())[-2:][::-1]

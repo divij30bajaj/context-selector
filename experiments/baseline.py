@@ -1,4 +1,4 @@
-from data.doc_nmt import DocNMT
+from data_builder.doc_nmt import DocNMT
 
 
 def context_builder(document):

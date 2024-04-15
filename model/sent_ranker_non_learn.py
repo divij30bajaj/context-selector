@@ -81,12 +81,14 @@ class SentRankerNonLearn(SentRankerNLBase):
                 else:
                     continue
 
-                tokenized_input = self.tokenizer(input_sentence, return_tensors="pt")
+                input_ids, attn_mask = self.tokenizer(input_sentence, return_tensors="pt")
+                input_ids = input_ids.cuda()
+                attn_mask = attn_mask.cuda()
                 with torch.no_grad():
-                    outputs = self.model(**tokenized_input)
+                    outputs = self.model(input_ids, attn_mask)
                     logits = outputs.logits
 
-                mask_index = torch.where(tokenized_input["input_ids"] == self.tokenizer.mask_token_id)
+                mask_index = torch.where(input_ids == self.tokenizer.mask_token_id)
                 probs = torch.nn.functional.softmax(logits[mask_index[0], mask_index[1], :], dim=-1)
                 score = []
                 for j, mid in enumerate(masked_ids):
@@ -101,7 +103,7 @@ class SentRankerNonLearn(SentRankerNLBase):
                 normalized_mlm_score = normalize_mlm(mlm_score)
                 entity_overlap_score = entity_scores[i] if i in entity_scores.keys() else 0
                 total_score = self.weight * entity_overlap_score + (1 - self.weight) * normalized_mlm_score
-                rank.append((total_score, i, mlm_score, normalized_mlm_score, entity_overlap_score))
+                rank.append((total_score, i))
 
             rank.sort(reverse=True)
             selected_sent_idx = rank[0][1]
@@ -142,10 +144,11 @@ if __name__ == '__main__':
         "It must be stopped,\" Guterres said.",
         "There are people who are still being killed here and there -- even some massacres still taking place."
     ]
-    exp = SentRankerNonLearn(threshold=0.4, weight=0.5)
+    exp = SentRankerNonLearn(threshold=0.4, weight=0, topK=3)
     start = time.time()
-    result = exp.rank_for_entire_doc(sentences)
-    for i, sent in enumerate(sentences):
-        print("Sentence: {}".format(sentences[i]))
-        print("Context: {}".format(result[i]))
-        print("")
+    # result = exp.rank_for_entire_doc(sentences)
+    result = exp.rank_for_single_sent(sentences, 3)
+    # for i, sent in enumerate(sentences):
+    print("Sentence: {}".format(sentences[2]))
+    print("Context: {}".format(result))
+    print("")

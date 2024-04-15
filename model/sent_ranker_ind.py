@@ -15,12 +15,14 @@ class SentRankerIndNL(SentRankerNLBase):
                 input_sentence = masked_sentence + " </s> " + sentences[i]
             else:
                 continue
-            tokenized_input = self.tokenizer(input_sentence, return_tensors="pt")
+            input_ids, attn_mask = self.tokenizer(input_sentence, return_tensors="pt")
+            input_ids = input_ids.cuda()
+            attn_mask = attn_mask.cuda()
             with torch.no_grad():
-                outputs = self.model(**tokenized_input)
+                outputs = self.model(input_ids, attn_mask)
                 logits = outputs.logits
 
-            mask_index = torch.where(tokenized_input["input_ids"] == self.tokenizer.mask_token_id)
+            mask_index = torch.where(input_ids == self.tokenizer.mask_token_id)
             probs = torch.nn.functional.softmax(logits[mask_index[0], mask_index[1], :], dim=-1)
             score = []
             for j, mid in enumerate(masked_ids):

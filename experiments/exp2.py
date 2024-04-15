@@ -40,7 +40,7 @@ if __name__ == '__main__':
     name = "exp_two"
     exp = SentRankerNonLearn(threshold=0.4, weight=0.5)
     data_builder = DocNMT(None, dataset="IWSLT17", name=name)
-    corp = data_builder.build_document_level()
+    corp = data_builder.build_raw_documents()
     for split in ["test", "dev", "train"]:
         print("Start Time:", time.time())
         custom_data = ExpTwoDataset(corp, exp, split=split)

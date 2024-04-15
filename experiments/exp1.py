@@ -39,9 +39,8 @@ if __name__ == '__main__':
     name = "exp_one"
     exp = SentRankerIndNL(threshold=1.5)
     data_builder = DocNMT(None, dataset="IWSLT17", name=name)
-    corp = data_builder.build_document_level()
-    # for split in ["test", "dev", "train"]:
-    for split in ["train"]:
+    corp = data_builder.build_raw_documents()
+    for split in ["test", "dev", "train"]:
         print("Start Time:", time.time())
         custom_data = ExpOneDataset(corp, exp, split=split)
         dataloader = DataLoader(custom_data, batch_size=1, num_workers=1)

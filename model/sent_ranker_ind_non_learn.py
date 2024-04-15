@@ -9,7 +9,7 @@ class SentRankerNLBase:
         self.threshold = threshold
         self.topK = topK
         model_name = "roberta-base"
-        self.model = RobertaForMaskedLM.from_pretrained(model_name)
+        self.model = RobertaForMaskedLM.from_pretrained(model_name).cuda()
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     def prepare_masked_input(self, sentence, masks_pos):
