@@ -14,6 +14,4 @@ def context_builder(document):
 
 if __name__ == '__main__':
     data_builder = DocNMT(context_builder, dataset="IWSLT17")
-
-    data_builder.build_sentence_level()
-    data_builder.build_document_level()
+    data_builder.build_dataset()

@@ -32,7 +32,6 @@ class DocNMT(DataBuilder):
         self.de_tokenizer = MosesTokenizer('de')
         self.en_normalizer = MosesPunctNormalizer('en')
         self.de_normalizer = MosesPunctNormalizer('de')
-        self.langs = ["en", "de"]
         self.splits = ["train", "dev", "test"]
         super(DocNMT).__init__()
 
@@ -41,30 +40,6 @@ class DocNMT(DataBuilder):
             return "dataset/IWSLT17/raw"
         else:
             return ValueError("Invalid dataset")
-
-    def build_sentence_level(self):
-        for split in self.splits:
-            for lang in self.langs:
-                print("Loading {} split for lang: {}".format(split, lang))
-
-                input_file = os.path.join(self.data_path, "concatenated_en2de_{}_{}.txt".format(split, lang))
-                output_file = os.path.join(self.out_path, "{}-sent.{}".format(split, lang))
-
-                f = open(output_file, 'w', encoding='utf-8')
-                sf = open(input_file, "r", encoding="utf-8")
-
-                for row in tqdm.tqdm(sf.readlines()):
-                    row = row.strip()
-                    if not row.startswith("<"):
-                        if lang == 'en':
-                            normalized = self.en_normalizer.normalize(row)
-                            tokenized = self.en_tokenizer.tokenize(normalized)
-                        else:
-                            normalized = self.de_normalizer.normalize(row)
-                            tokenized = self.de_tokenizer.tokenize(normalized)
-                        f.write(" ".join(tokenized) + "\n")
-                f.close()
-                sf.close()
 
     def build_raw_documents(self):
         splits = {}
@@ -95,14 +70,13 @@ class DocNMT(DataBuilder):
             splits[split] = corpus
         return splits
 
-    def build_document_level(self):
-        splits = {}
+    def build_dataset(self):
         for split in self.splits:
-            corpus = []
             en_input_file = os.path.join(self.data_path, "concatenated_en2de_{}_{}.txt".format(split, "en"))
             de_input_file = os.path.join(self.data_path, "concatenated_en2de_{}_{}.txt".format(split, "de"))
             esf = open(en_input_file, "r", encoding="utf-8")
             dsf = open(de_input_file, "r", encoding="utf-8")
+            en_sent_data, de_sent_data, context_data = [], [], []
 
             en_sents, de_sents = esf.readlines(), dsf.readlines()
             en_doc, de_doc = [], []
@@ -120,13 +94,17 @@ class DocNMT(DataBuilder):
                 else:
                     if len(en_doc) != 0:
                         context = self.context_builder(en_doc)
-                        write_to_files(split, en_doc, de_doc, context)
+                        en_sent_data.extend(en_doc)
+                        de_sent_data.extend(de_doc)
+                        context_data.extend(context)
                         en_doc, de_doc = [], []
 
             if len(en_doc) != 0:
                 context = self.context_builder(en_doc)
-                write_to_files(split, en_doc, de_doc, context)
+                en_sent_data.extend(en_doc)
+                de_sent_data.extend(de_doc)
+                context_data.extend(context)
             esf.close()
             dsf.close()
-            splits[split] = corpus
-        return splits
+
+            write_to_files(split, en_sent_data, de_sent_data, context_data)

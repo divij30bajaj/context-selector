@@ -6,9 +6,9 @@ class DataBuilder(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def build_sentence_level(self):
+    def build_raw_documents(self):
         return NotImplementedError("Cannot run abstract method")
 
     @abc.abstractmethod
-    def build_document_level(self):
+    def build_dataset(self):
         return NotImplementedError("Cannot run abstract method")
